@@ -2,11 +2,7 @@ run = "cd slate && npm install && npm run dev"
 entrypoint = "slate/src/app/page.tsx"
 
 [nix]
-channel = "stable-24_05"
-
-[deployment]
-run = ["sh", "-c", "cd slate && npm run build && npm run start"]
-deploymentTarget = "cloudrun"
+channel = "stable-23_11"
 
 [[ports]]
 localPort = 3000
