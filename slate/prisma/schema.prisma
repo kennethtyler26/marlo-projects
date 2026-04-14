@@ -1,0 +1,381 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================
+// ORGANIZATION & USERS
+// ============================================
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  
+  // Branding
+  logoUrl       String?
+  primaryColor  String   @default("#0F172A")
+  secondaryColor String  @default("#3B82F6")
+  
+  // Business Settings
+  defaultMargin     Float    @default(30)
+  defaultPaymentTerms Int    @default(30) // days
+  defaultTaxRate    Float    @default(0)
+  currency          String   @default("USD")
+  
+  // Stripe Connect
+  stripeAccountId   String?
+  stripeOnboarded   Boolean  @default(false)
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  users      User[]
+  clients    Client[]
+  estimates  Estimate[]
+  invoices   Invoice[]
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  avatarUrl String?
+  
+  // Supabase Auth
+  authId    String   @unique
+  
+  // Role
+  role      UserRole @default(MEMBER)
+  
+  // Organization
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([organizationId])
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+// ============================================
+// CLIENTS
+// ============================================
+
+model Client {
+  id        String   @id @default(cuid())
+  
+  // Basic Info
+  name          String
+  email         String?
+  phone         String?
+  companyName   String?
+  
+  // Billing Address
+  addressLine1  String?
+  addressLine2  String?
+  city          String?
+  state         String?
+  postalCode    String?
+  country       String   @default("US")
+  
+  // Settings
+  paymentTerms  Int?     // Override org default
+  taxExempt     Boolean  @default(false)
+  notes         String?
+  
+  // Portal Access
+  portalToken   String?  @unique
+  
+  // Organization
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  estimates  Estimate[]
+  invoices   Invoice[]
+  
+  @@index([organizationId])
+}
+
+// ============================================
+// ESTIMATES
+// ============================================
+
+model Estimate {
+  id        String   @id @default(cuid())
+  number    String   // EST-001
+  
+  // Status
+  status    EstimateStatus @default(DRAFT)
+  
+  // Dates
+  issueDate   DateTime @default(now())
+  validUntil  DateTime?
+  approvedAt  DateTime?
+  
+  // Totals (calculated)
+  subtotal      Float  @default(0)
+  taxAmount     Float  @default(0)
+  totalCost     Float  @default(0) // Internal: what it costs us
+  totalPrice    Float  @default(0) // Client: what they pay
+  marginPercent Float  @default(0) // Calculated margin
+  
+  // Tax
+  taxRate   Float  @default(0)
+  
+  // Notes
+  internalNotes String?
+  clientNotes   String?
+  
+  // Version tracking
+  version   Int    @default(1)
+  
+  // Relations
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  clientId  String
+  client    Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  segments  EstimateSegment[]
+  invoice   Invoice?
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([organizationId])
+  @@index([clientId])
+}
+
+enum EstimateStatus {
+  DRAFT
+  SENT
+  VIEWED
+  APPROVED
+  REJECTED
+  CONVERTED
+  EXPIRED
+}
+
+model EstimateSegment {
+  id        String   @id @default(cuid())
+  
+  // Segment Info
+  name          String   // "Woodworking", "Electrical", etc.
+  description   String?  // Internal description
+  aiSummary     String?  // AI-generated client-facing summary
+  
+  // Display
+  displayOrder  Int      @default(0)
+  collapsed     Boolean  @default(false) // In client view
+  
+  // Estimate
+  estimateId String
+  estimate   Estimate @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  
+  // Line Items
+  lineItems  LineItem[]
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([estimateId])
+}
+
+model LineItem {
+  id        String   @id @default(cuid())
+  
+  // Item Info
+  description   String
+  quantity      Float    @default(1)
+  unit          String   @default("each") // each, hour, sqft, etc.
+  
+  // Pricing
+  costPerUnit   Float    @default(0)  // What it costs us
+  markupPercent Float    @default(30) // Markup percentage
+  pricePerUnit  Float    @default(0)  // Calculated: cost * (1 + markup)
+  
+  // Totals
+  totalCost     Float    @default(0)  // cost * quantity
+  totalPrice    Float    @default(0)  // price * quantity
+  
+  // Category
+  category      LineItemCategory @default(MATERIALS)
+  
+  // Display
+  displayOrder  Int      @default(0)
+  showInClientView Boolean @default(true)
+  
+  // Segment
+  segmentId String
+  segment   EstimateSegment @relation(fields: [segmentId], references: [id], onDelete: Cascade)
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([segmentId])
+}
+
+enum LineItemCategory {
+  LABOR
+  MATERIALS
+  SUBCONTRACTOR
+  EQUIPMENT
+  OVERHEAD
+  OTHER
+}
+
+// ============================================
+// INVOICES
+// ============================================
+
+model Invoice {
+  id        String   @id @default(cuid())
+  number    String   // INV-001
+  
+  // Status
+  status    InvoiceStatus @default(DRAFT)
+  
+  // Dates
+  issueDate   DateTime @default(now())
+  dueDate     DateTime
+  paidAt      DateTime?
+  
+  // Totals
+  subtotal    Float  @default(0)
+  taxAmount   Float  @default(0)
+  totalAmount Float  @default(0)
+  amountPaid  Float  @default(0)
+  
+  // Tax
+  taxRate     Float  @default(0)
+  
+  // Stripe
+  stripePaymentIntentId String?
+  stripePaymentLink     String?
+  
+  // Notes
+  internalNotes String?
+  clientNotes   String?
+  
+  // Relations
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  clientId  String
+  client    Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  // Optional: created from estimate
+  estimateId String? @unique
+  estimate   Estimate? @relation(fields: [estimateId], references: [id])
+  
+  // Line items (denormalized for invoices)
+  items     InvoiceItem[]
+  payments  Payment[]
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([organizationId])
+  @@index([clientId])
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  VIEWED
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  VOID
+}
+
+model InvoiceItem {
+  id        String   @id @default(cuid())
+  
+  // Item Info
+  description   String
+  quantity      Float    @default(1)
+  unit          String   @default("each")
+  unitPrice     Float    @default(0)
+  totalAmount   Float    @default(0)
+  
+  // Display
+  displayOrder  Int      @default(0)
+  
+  // Invoice
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([invoiceId])
+}
+
+model Payment {
+  id        String   @id @default(cuid())
+  
+  // Amount
+  amount    Float
+  
+  // Stripe
+  stripePaymentIntentId String?
+  stripeChargeId        String?
+  
+  // Method
+  method    PaymentMethod @default(CARD)
+  
+  // Status
+  status    PaymentStatus @default(PENDING)
+  
+  // Invoice
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([invoiceId])
+}
+
+enum PaymentMethod {
+  CARD
+  BANK_TRANSFER
+  CHECK
+  CASH
+  OTHER
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
