@@ -46,8 +46,7 @@ export default function SignupPage() {
 
       // If session exists, email confirmation is disabled - go straight to dashboard
       if (data.session) {
-        router.push("/dashboard");
-        router.refresh();
+        window.location.href = "/dashboard";
         return;
       }
 

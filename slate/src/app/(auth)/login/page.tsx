@@ -39,8 +39,8 @@ export default function LoginPage() {
         return;
       }
 
-      router.push("/dashboard");
-      router.refresh();
+      // Success - redirect to dashboard
+      window.location.href = "/dashboard";
     } catch (err) {
       console.error("Login error:", err);
       setError("An unexpected error occurred. Please try again.");
