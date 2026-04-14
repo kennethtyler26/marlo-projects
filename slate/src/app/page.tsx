@@ -202,7 +202,7 @@ export default function LandingPage() {
               <span className="text-white dark:text-slate-900 font-bold text-xs">S</span>
             </div>
             <span className="text-sm text-slate-600 dark:text-slate-400">
-              © 2026 Slate. All rights reserved.
+              © 2026 SlatePro. All rights reserved.
             </span>
           </div>
           <div className="flex items-center gap-6 text-sm text-slate-600 dark:text-slate-400">
