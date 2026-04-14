@@ -1,8 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    typedRoutes: true,
-  },
   images: {
     remotePatterns: [
       {
@@ -11,8 +8,6 @@ const nextConfig = {
       },
     ],
   },
-  // Allow all hosts for Replit deployment
-  allowedDevOrigins: ['*'],
   async headers() {
     return [
       {
